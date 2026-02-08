@@ -55,9 +55,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div class="card">
 <h2>Configuration</h2>
 <div class="mode-toggle">
-<button class="active" onclick="setMode('auto')">Auto (Yahoo Finance)</button>
-<button onclick="setMode('manual')">Manual Entry</button>
+<button onclick="setMode('auto')">Auto (Yahoo Finance)</button>
+<button class="active" onclick="setMode('manual')">Manual Entry</button>
 </div>
+<p style="font-size:.75rem;color:var(--dim);margin-bottom:12px">💡 Manual entry is recommended — use actual prices from your broker for accuracy. Auto mode may be unavailable due to Yahoo Finance rate limits.</p>
 
 <label>Amount to Borrow ($)</label>
 <input type="number" id="amount" value="100000" min="1000" step="1000">
@@ -81,7 +82,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <option value="500">$500</option>
 </select>
 
-<div id="manual-section" class="hidden">
+<div id="manual-section">
 <label>SPX Current Price</label>
 <input type="number" id="spx-price" value="6050" step="1">
 <label>Lower Strike (K1)</label>
@@ -146,7 +147,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <script>
-let mode = 'auto';
+let mode = 'manual';
 let selectedDays = 180;
 
 function setMode(m) {
