@@ -1,0 +1,12 @@
+{
+  "name": "spx-box-calculator",
+  "version": "1.0.0",
+  "description": "SPX Box Spread Calculator with Yahoo Finance proxy",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
