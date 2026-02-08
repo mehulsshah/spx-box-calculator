@@ -105,7 +105,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <h2>📊 Box Spread Structure</h2>
 <div id="expiry-info" style="font-size:.85rem;color:var(--dim);margin-bottom:8px"></div>
 <table class="legs-table">
-<thead><tr><th>Leg</th><th>Type</th><th>Strike</th><th>Action</th></tr></thead>
+<thead><tr><th>Leg</th><th>Ticker</th><th>Type</th><th>Strike</th><th>Action</th></tr></thead>
 <tbody id="legs-body"></tbody>
 </table>
 <div id="contracts-info" style="font-size:.9rem;margin-top:8px"></div>
@@ -310,13 +310,23 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   const impliedRate = (repay / credit - 1) * (365 / dte);
   const marginRate = 0.11;
 
+  // Generate OCC option symbols: SPXW YYMMDD C/P SSSSSSSS (strike * 1000, 8 digits)
+  function occSym(strike, type) {
+    const exp = typeof expiry === 'string' && expiry.includes('-') ? expiry : '';
+    if (!exp) return `SPXW ${type}${strike}`;
+    const [y, m, d] = exp.split('-');
+    const yy = y.slice(-2);
+    const s = String(Math.round(strike * 1000)).padStart(8, '0');
+    return `SPXW${yy}${m}${d}${type}${s}`;
+  }
+
   document.getElementById('expiry-info').innerHTML = `Expiry: <strong>${expiry}</strong> · ${dte} DTE${spot ? ` · SPX: ${fmt(spot)}` : ''} · Width: $${width}`;
 
   document.getElementById('legs-body').innerHTML = `
-    <tr><td>1</td><td>Call</td><td>${fmt(k1)}</td><td class="buy">BUY</td></tr>
-    <tr><td>2</td><td>Call</td><td>${fmt(k2)}</td><td class="sell">SELL</td></tr>
-    <tr><td>3</td><td>Put</td><td>${fmt(k2)}</td><td class="buy">BUY</td></tr>
-    <tr><td>4</td><td>Put</td><td>${fmt(k1)}</td><td class="sell">SELL</td></tr>`;
+    <tr><td>1</td><td style="font-family:monospace;font-size:.75rem">${occSym(k1,'C')}</td><td>Call</td><td>${fmt(k1)}</td><td class="buy">BUY</td></tr>
+    <tr><td>2</td><td style="font-family:monospace;font-size:.75rem">${occSym(k2,'C')}</td><td>Call</td><td>${fmt(k2)}</td><td class="sell">SELL</td></tr>
+    <tr><td>3</td><td style="font-family:monospace;font-size:.75rem">${occSym(k2,'P')}</td><td>Put</td><td>${fmt(k2)}</td><td class="buy">BUY</td></tr>
+    <tr><td>4</td><td style="font-family:monospace;font-size:.75rem">${occSym(k1,'P')}</td><td>Put</td><td>${fmt(k1)}</td><td class="sell">SELL</td></tr>`;
 
   document.getElementById('contracts-info').innerHTML = `<strong>${contracts}</strong> contract${contracts>1?'s':''} × $${width} wide = ${fmt(repay)} notional at expiry`;
 
