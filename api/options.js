@@ -1,38 +1,42 @@
 // Vercel Serverless Function: proxies Yahoo Finance SPX options data
 // Uses cookie + crumb authentication (required since 2024)
 
-let cachedAuth = null;
-let authExpiry = 0;
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 async function getAuth() {
-  const now = Date.now();
-  if (cachedAuth && now < authExpiry) return cachedAuth;
-
   // Step 1: Get cookies from Yahoo Finance
   const initRes = await fetch('https://finance.yahoo.com/quote/%5ESPX/', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml',
-    },
+    headers: { 'User-Agent': UA, 'Accept': 'text/html' },
     redirect: 'follow',
   });
 
-  const cookies = initRes.headers.getSetCookie?.() || [];
-  const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
+  // Parse set-cookie headers (getSetCookie may not exist in all runtimes)
+  let cookieStr = '';
+  const raw = initRes.headers.raw?.()?.['set-cookie'];
+  if (raw) {
+    cookieStr = raw.map(c => c.split(';')[0]).join('; ');
+  } else if (typeof initRes.headers.getSetCookie === 'function') {
+    cookieStr = initRes.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+  } else {
+    // Fallback: try get('set-cookie') which concatenates
+    const sc = initRes.headers.get('set-cookie') || '';
+    cookieStr = sc;
+  }
+
+  // Consume body
+  await initRes.text();
 
   // Step 2: Get crumb
   const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      'Cookie': cookieStr,
-    },
+    headers: { 'User-Agent': UA, 'Cookie': cookieStr },
   });
-
   const crumb = await crumbRes.text();
 
-  cachedAuth = { cookie: cookieStr, crumb };
-  authExpiry = now + 5 * 60 * 1000; // cache 5 min
-  return cachedAuth;
+  if (!crumb || crumb.includes('<') || crumb.length > 50) {
+    throw new Error('Failed to obtain crumb from Yahoo Finance');
+  }
+
+  return { cookie: cookieStr, crumb };
 }
 
 export default async function handler(req, res) {
@@ -46,19 +50,15 @@ export default async function handler(req, res) {
     const url = date ? `${base}&date=${date}` : base;
 
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Cookie': auth.cookie,
-      },
+      headers: { 'User-Agent': UA, 'Cookie': auth.cookie },
     });
 
     if (!response.ok) {
-      // Clear cache on auth failure so next request retries
-      if (response.status === 401) {
-        cachedAuth = null;
-        authExpiry = 0;
-      }
-      return res.status(response.status).json({ error: `Yahoo Finance returned ${response.status}` });
+      const body = await response.text();
+      return res.status(response.status).json({
+        error: `Yahoo Finance returned ${response.status}`,
+        detail: body.substring(0, 200),
+      });
     }
 
     const data = await response.json();
