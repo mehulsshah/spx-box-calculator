@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPX Box Spread Calculator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1117;--card:#1a1d27;--border:#2a2d3a;--accent:#4f8ff7;--accent2:#22c55e;--red:#ef4444;--text:#e2e8f0;--dim:#8892a8;--input-bg:#252836}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:16px}
+.container{max-width:720px;margin:0 auto}
+h1{font-size:1.5rem;text-align:center;margin-bottom:4px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{text-align:center;color:var(--dim);font-size:.85rem;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h2{font-size:1.1rem;margin-bottom:16px;color:var(--accent)}
+label{display:block;font-size:.85rem;color:var(--dim);margin-bottom:6px}
+input,select{width:100%;padding:12px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:1rem;margin-bottom:14px;-webkit-appearance:none}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.duration-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.duration-btns button{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text);font-size:.85rem;cursor:pointer;flex:1;min-width:60px}
+.duration-btns button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-calc{width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),#3b7de8);border:none;border-radius:10px;color:#fff;font-size:1.05rem;font-weight:600;cursor:pointer;margin-top:4px}
+.btn-calc:active{transform:scale(.98)}
+.mode-toggle{display:flex;gap:8px;margin-bottom:16px}
+.mode-toggle button{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--dim);font-size:.85rem;cursor:pointer}
+.mode-toggle button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+#results{display:none}
+.legs-table{width:100%;border-collapse:collapse;font-size:.85rem;margin:12px 0}
+.legs-table th{text-align:left;color:var(--dim);padding:8px 6px;border-bottom:1px solid var(--border);font-weight:500}
+.legs-table td{padding:8px 6px;border-bottom:1px solid var(--border)}
+.buy{color:var(--accent2)}
+.sell{color:var(--red)}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.stat{background:var(--input-bg);border-radius:8px;padding:12px}
+.stat .val{font-size:1.3rem;font-weight:700}
+.stat .lbl{font-size:.75rem;color:var(--dim);margin-top:2px}
+.compare{display:flex;align-items:center;gap:12px;padding:12px;background:var(--input-bg);border-radius:8px;margin-top:12px}
+.compare .bar{flex:1;height:8px;background:var(--border);border-radius:4px;position:relative;overflow:hidden}
+.compare .bar .fill{height:100%;border-radius:4px;position:absolute;left:0;top:0}
+.note{font-size:.8rem;color:var(--dim);line-height:1.5;margin-top:8px}
+.note strong{color:var(--text)}
+.error{color:var(--red);font-size:.85rem;padding:12px;background:rgba(239,68,68,.1);border-radius:8px;margin-bottom:12px}
+.status{text-align:center;color:var(--dim);font-size:.85rem;padding:20px}
+.hidden{display:none}
+#manual-section label{font-size:.8rem}
+#manual-section input{margin-bottom:10px}
+.savings-highlight{color:var(--accent2);font-weight:700;font-size:1.1rem}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📦 SPX Box Spread Calculator</h1>
+<p class="subtitle">Synthetic borrowing via options</p>
+
+<div class="card">
+<h2>Configuration</h2>
+<div class="mode-toggle">
+<button class="active" onclick="setMode('auto')">Auto (Yahoo Finance)</button>
+<button onclick="setMode('manual')">Manual Entry</button>
+</div>
+
+<label>Amount to Borrow ($)</label>
+<input type="number" id="amount" value="100000" min="1000" step="1000">
+
+<label>Time Period (days)</label>
+<div class="duration-btns">
+<button onclick="setDays(30)">30d</button>
+<button onclick="setDays(60)">60d</button>
+<button onclick="setDays(90)">90d</button>
+<button onclick="setDays(180)" class="active">180d</button>
+<button onclick="setDays(365)">1yr</button>
+<button onclick="setDays(730)">2yr</button>
+</div>
+<input type="number" id="days" value="180" min="1" max="1095" placeholder="Or enter custom days">
+
+<label>Strike Width ($)</label>
+<select id="width">
+<option value="50">$50</option>
+<option value="100" selected>$100</option>
+<option value="200">$200</option>
+<option value="500">$500</option>
+</select>
+
+<div id="manual-section" class="hidden">
+<label>SPX Current Price</label>
+<input type="number" id="spx-price" value="6050" step="1">
+<label>Lower Strike (K1)</label>
+<input type="number" id="k1" value="6000" step="50">
+<label>Upper Strike (K2)</label>
+<input type="number" id="k2" value="6100" step="50">
+<label>Expiration Date</label>
+<input type="date" id="expiry-date">
+<label>Net Debit per Box (premium paid, e.g. 99.50 for $100 wide box)</label>
+<input type="number" id="box-debit" value="99.50" step="0.01">
+</div>
+
+<button class="btn-calc" onclick="calculate()">Calculate Box Spread</button>
+</div>
+
+<div id="error" class="error hidden"></div>
+<div id="loading" class="status hidden">Fetching SPX options data...</div>
+
+<div id="results">
+<div class="card">
+<h2>📊 Box Spread Structure</h2>
+<div id="expiry-info" style="font-size:.85rem;color:var(--dim);margin-bottom:8px"></div>
+<table class="legs-table">
+<thead><tr><th>Leg</th><th>Type</th><th>Strike</th><th>Action</th></tr></thead>
+<tbody id="legs-body"></tbody>
+</table>
+<div id="contracts-info" style="font-size:.9rem;margin-top:8px"></div>
+</div>
+
+<div class="card">
+<h2>💰 Economics</h2>
+<div class="stat-grid">
+<div class="stat"><div class="val" id="s-credit">—</div><div class="lbl">Net Credit (Borrowed)</div></div>
+<div class="stat"><div class="val" id="s-cost">—</div><div class="lbl">Repay at Expiry</div></div>
+<div class="stat"><div class="val" id="s-interest">—</div><div class="lbl">Total Interest Cost</div></div>
+<div class="stat"><div class="val" id="s-rate">—</div><div class="lbl">Implied Annual Rate</div></div>
+</div>
+
+<div class="compare">
+<div style="flex-shrink:0;font-size:.85rem">
+<div>Box: <span id="c-box" style="color:var(--accent2)">—</span></div>
+<div>Margin: <span id="c-margin" style="color:var(--red)">~10-12%</span></div>
+</div>
+<div class="bar">
+<div class="fill" id="bar-box" style="background:var(--accent2);width:0%"></div>
+</div>
+</div>
+<div id="savings" style="text-align:center;margin-top:12px"></div>
+</div>
+
+<div class="card">
+<h2>📝 Important Notes</h2>
+<p class="note">
+<strong>European-Style Only:</strong> Use SPX (S&P 500 Index options), NOT SPY. SPX options are European-style (cash-settled, no early assignment risk), which is critical for box spreads. SPY options are American-style and can be assigned early, breaking the trade.<br><br>
+<strong>Section 1256 Tax Treatment:</strong> SPX options qualify under Section 1256 — gains/losses are taxed 60% long-term / 40% short-term regardless of holding period. The interest cost from a box spread may be deductible as investment interest expense.<br><br>
+<strong>Portfolio Margin Required:</strong> Box spreads require portfolio margin to be capital-efficient. Under Reg-T margin, you'd need to post full collateral for the short legs, making it uneconomical. With portfolio margin, the margin requirement is roughly the box value since the risk is fully defined.<br><br>
+<strong>Execution:</strong> Trade as a single 4-leg combo order on CBOE. Use limit orders — the spread between bid/ask is where your rate is determined. Mid-price is a good starting point.<br><br>
+<strong>Minimum Account:</strong> Portfolio margin typically requires $125K+ account value. Box spreads are best for borrowing $50K+.
+</p>
+</div>
+</div>
+</div>
+
+<script>
+let mode = 'auto';
+let selectedDays = 180;
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-toggle button').forEach((b,i) => b.classList.toggle('active', (i===0&&m==='auto')||(i===1&&m==='manual')));
+  document.getElementById('manual-section').classList.toggle('hidden', m==='auto');
+}
+
+function setDays(d) {
+  selectedDays = d;
+  document.getElementById('days').value = d;
+  document.querySelectorAll('.duration-btns button').forEach(b => b.classList.toggle('active', parseInt(b.textContent)===d || (b.textContent==='1yr'&&d===365) || (b.textContent==='2yr'&&d===730)));
+}
+
+document.getElementById('days').addEventListener('input', function() {
+  selectedDays = parseInt(this.value) || 180;
+  document.querySelectorAll('.duration-btns button').forEach(b => b.classList.remove('active'));
+});
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function hideError() { document.getElementById('error').classList.add('hidden'); }
+
+function fmt(n) { return n.toLocaleString('en-US', {style:'currency',currency:'USD',minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtDec(n) { return n.toLocaleString('en-US', {style:'currency',currency:'USD',minimumFractionDigits:2}); }
+function pct(n) { return (n*100).toFixed(2) + '%'; }
+
+async function calculate() {
+  hideError();
+  const amount = parseFloat(document.getElementById('amount').value);
+  const days = parseInt(document.getElementById('days').value);
+  const width = parseInt(document.getElementById('width').value);
+
+  if (!amount || amount < 1000) return showError('Enter a borrow amount ≥ $1,000');
+  if (!days || days < 1) return showError('Enter valid days');
+
+  if (mode === 'manual') {
+    calcManual(amount, days, width);
+  } else {
+    await calcAuto(amount, days, width);
+  }
+}
+
+function calcManual(amount, days, width) {
+  const k1 = parseFloat(document.getElementById('k1').value);
+  const k2 = parseFloat(document.getElementById('k2').value);
+  const boxDebit = parseFloat(document.getElementById('box-debit').value);
+  const expiryStr = document.getElementById('expiry-date').value;
+
+  if (!k1 || !k2 || k2 <= k1) return showError('K2 must be greater than K1');
+  if (!boxDebit) return showError('Enter box debit price');
+
+  const actualWidth = k2 - k1;
+  const dte = expiryStr ? Math.round((new Date(expiryStr) - new Date()) / 86400000) : days;
+
+  // Net credit per contract = (box_width - debit) * 100... wait, box debit is what you pay.
+  // Actually for borrowing: you SELL the box for a credit.
+  // Box credit received per contract = boxDebit * 100 (boxDebit is the premium per spread point)
+  // At expiry you owe: actualWidth * 100 per contract
+  // So credit = boxDebit * 100, cost = actualWidth * 100
+  // Hmm, let me reconsider. For a box spread to borrow money:
+  // You receive net credit = premium. At expiry, box settles at width.
+  // The "debit" field: let's treat it as the net credit received per $1 of width
+  // Actually simpler: boxDebit = credit received per contract in points. Box value at expiry = width points.
+  // So if width=100, boxDebit=99.50, credit per contract = 99.50 * 100 = $9,950, repay = $10,000
+
+  const creditPerContract = boxDebit * 100;
+  const repayPerContract = actualWidth * 100;
+  const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+  const totalCredit = numContracts * creditPerContract;
+  const totalRepay = numContracts * repayPerContract;
+
+  displayResults(k1, k2, expiryStr || `~${dte} days`, dte, numContracts, totalCredit, totalRepay);
+}
+
+async function calcAuto(amount, days, width) {
+  const loading = document.getElementById('loading');
+  loading.classList.remove('hidden');
+  document.getElementById('results').style.display = 'none';
+
+  try {
+    // Try fetching from Yahoo Finance
+    const proxyUrls = [
+      `https://query2.finance.yahoo.com/v7/finance/options/%5ESPX`,
+      `https://query1.finance.yahoo.com/v7/finance/options/%5ESPX`,
+    ];
+
+    let data = null;
+    for (const url of proxyUrls) {
+      try {
+        const r = await fetch(url);
+        if (r.ok) { data = await r.json(); break; }
+      } catch(e) { continue; }
+    }
+
+    if (!data || !data.optionChain?.result?.[0]) {
+      loading.classList.add('hidden');
+      showError('Cannot fetch Yahoo Finance data (likely CORS). Switch to Manual Entry mode, or serve this page from a local server with a CORS proxy.');
+      return;
+    }
+
+    const result = data.optionChain.result[0];
+    const spot = result.quote.regularMarketPrice;
+    const expirations = result.expirationDates; // epoch seconds
+
+    // Find closest expiry to desired days
+    const targetEpoch = Math.floor(Date.now()/1000) + days * 86400;
+    let bestExp = expirations[0], bestDiff = Math.abs(expirations[0] - targetEpoch);
+    for (const exp of expirations) {
+      const diff = Math.abs(exp - targetEpoch);
+      if (diff < bestDiff) { bestDiff = diff; bestExp = exp; }
+    }
+
+    const expDate = new Date(bestExp * 1000);
+    const dte = Math.round((bestExp - Date.now()/1000) / 86400);
+    const expiryStr = expDate.toISOString().split('T')[0];
+
+    // Choose strikes near ATM, rounded to width
+    const k1 = Math.round(spot / width) * width - width;
+    const k2 = k1 + width;
+
+    // Estimate box price using risk-free rate approximation
+    // Since we can't easily get all 4 option prices from the basic endpoint,
+    // estimate using put-call parity: box should trade near PV of width
+    // Use ~4.5% as typical risk-free rate estimate
+    const estRate = 0.045;
+    const boxPrice = width * Math.exp(-estRate * dte / 365);
+    const creditPerContract = boxPrice * 100;
+    const repayPerContract = width * 100;
+    const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+    const totalCredit = numContracts * creditPerContract;
+    const totalRepay = numContracts * repayPerContract;
+
+    loading.classList.add('hidden');
+    displayResults(k1, k2, expiryStr, dte, numContracts, totalCredit, totalRepay, spot);
+
+  } catch(e) {
+    loading.classList.add('hidden');
+    showError('Error: ' + e.message + '. Try Manual Entry mode.');
+  }
+}
+
+function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
+  const width = k2 - k1;
+  const interest = repay - credit;
+  const impliedRate = (repay / credit - 1) * (365 / dte);
+  const marginRate = 0.11;
+
+  document.getElementById('expiry-info').innerHTML = `Expiry: <strong>${expiry}</strong> · ${dte} DTE${spot ? ` · SPX: ${fmt(spot)}` : ''} · Width: $${width}`;
+
+  document.getElementById('legs-body').innerHTML = `
+    <tr><td>1</td><td>Call</td><td>${fmt(k1)}</td><td class="buy">BUY</td></tr>
+    <tr><td>2</td><td>Call</td><td>${fmt(k2)}</td><td class="sell">SELL</td></tr>
+    <tr><td>3</td><td>Put</td><td>${fmt(k2)}</td><td class="buy">BUY</td></tr>
+    <tr><td>4</td><td>Put</td><td>${fmt(k1)}</td><td class="sell">SELL</td></tr>`;
+
+  document.getElementById('contracts-info').innerHTML = `<strong>${contracts}</strong> contract${contracts>1?'s':''} × $${width} wide = ${fmt(repay)} notional at expiry`;
+
+  document.getElementById('s-credit').textContent = fmt(credit);
+  document.getElementById('s-cost').textContent = fmt(repay);
+  document.getElementById('s-interest').textContent = fmt(interest);
+  document.getElementById('s-rate').textContent = pct(impliedRate);
+  document.getElementById('s-rate').style.color = impliedRate < marginRate ? 'var(--accent2)' : 'var(--red)';
+
+  document.getElementById('c-box').textContent = pct(impliedRate);
+  const barPct = Math.min(100, (impliedRate / marginRate) * 100);
+  document.getElementById('bar-box').style.width = barPct + '%';
+
+  const marginInterest = credit * marginRate * (dte/365);
+  const saved = marginInterest - interest;
+  document.getElementById('savings').innerHTML = saved > 0
+    ? `<span class="savings-highlight">You save ~${fmt(saved)} vs margin loan over ${dte} days</span>`
+    : `<span style="color:var(--red)">Box rate exceeds typical margin — check pricing</span>`;
+
+  document.getElementById('results').style.display = 'block';
+}
+
+// Set default expiry date for manual mode
+const d = new Date(); d.setDate(d.getDate() + 180);
+document.getElementById('expiry-date').value = d.toISOString().split('T')[0];
+</script>
+</body>
+</html>
