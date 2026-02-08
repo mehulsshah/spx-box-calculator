@@ -55,10 +55,9 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div class="card">
 <h2>Configuration</h2>
 <div class="mode-toggle">
-<button onclick="setMode('auto')">Auto (Yahoo Finance)</button>
-<button class="active" onclick="setMode('manual')">Manual Entry</button>
+<button class="active" onclick="setMode('auto')">Auto (CBOE Data)</button>
+<button onclick="setMode('manual')">Manual Entry</button>
 </div>
-<p style="font-size:.75rem;color:var(--dim);margin-bottom:12px">💡 Manual entry is recommended — use actual prices from your broker for accuracy. Auto mode may be unavailable due to Yahoo Finance rate limits.</p>
 
 <label>Amount to Borrow ($)</label>
 <input type="number" id="amount" value="100000" min="1000" step="1000">
@@ -82,7 +81,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <option value="500">$500</option>
 </select>
 
-<div id="manual-section">
+<div id="manual-section" class="hidden">
 <label>SPX Current Price</label>
 <input type="number" id="spx-price" value="6050" step="1">
 <label>Lower Strike (K1)</label>
@@ -99,7 +98,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <div id="error" class="error hidden"></div>
-<div id="loading" class="status hidden">Fetching SPX options data...</div>
+<div id="loading" class="status hidden">Fetching SPX options data from CBOE...</div>
 
 <div id="results">
 <div class="card">
@@ -147,7 +146,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <script>
-let mode = 'manual';
+let mode = 'auto';
 let selectedDays = 180;
 
 function setMode(m) {
@@ -233,53 +232,71 @@ async function calcAuto(amount, days, width) {
   document.getElementById('results').style.display = 'none';
 
   try {
-    // Fetch via backend proxy (avoids CORS)
-    let data = null;
-    try {
-      const r = await fetch('/api/options');
-      if (r.ok) { data = await r.json(); }
-    } catch(e) { /* fall through */ }
-
-    if (!data || !data.optionChain?.result?.[0]) {
+    const r = await fetch('/api/options');
+    if (!r.ok) {
       loading.classList.add('hidden');
-      showError('Cannot fetch options data from server. Try Manual Entry mode.');
+      showError('Cannot fetch options data. Try Manual Entry mode.');
+      return;
+    }
+    const data = await r.json();
+    if (!data.spot || !data.expirations?.length) {
+      loading.classList.add('hidden');
+      showError(data.error || 'No options data returned. Try Manual Entry mode.');
       return;
     }
 
-    const result = data.optionChain.result[0];
-    const spot = result.quote.regularMarketPrice;
-    const expirations = result.expirationDates; // epoch seconds
+    const spot = data.spot;
 
     // Find closest expiry to desired days
-    const targetEpoch = Math.floor(Date.now()/1000) + days * 86400;
-    let bestExp = expirations[0], bestDiff = Math.abs(expirations[0] - targetEpoch);
-    for (const exp of expirations) {
-      const diff = Math.abs(exp - targetEpoch);
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+    const targetStr = targetDate.toISOString().split('T')[0];
+
+    let bestExp = data.expirations[0];
+    let bestDiff = Math.abs(new Date(data.expirations[0]) - targetDate);
+    for (const exp of data.expirations) {
+      const diff = Math.abs(new Date(exp) - targetDate);
       if (diff < bestDiff) { bestDiff = diff; bestExp = exp; }
     }
 
-    const expDate = new Date(bestExp * 1000);
-    const dte = Math.round((bestExp - Date.now()/1000) / 86400);
-    const expiryStr = expDate.toISOString().split('T')[0];
+    const dte = Math.round((new Date(bestExp) - new Date()) / 86400000);
+    const chain = data.chains[bestExp];
+    if (!chain) {
+      loading.classList.add('hidden');
+      showError('No chain data for selected expiry. Try Manual Entry.');
+      return;
+    }
 
-    // Choose strikes near ATM, rounded to width
-    const k1 = Math.round(spot / width) * width - width;
-    const k2 = k1 + width;
+    // Choose strikes near ATM
+    const strikes = Object.keys(chain).map(Number).sort((a,b) => a - b);
+    // Find K1 as the largest strike <= spot that aligns with width
+    let k1 = Math.floor(spot / width) * width;
+    let k2 = k1 + width;
 
-    // Estimate box price using risk-free rate approximation
-    // Since we can't easily get all 4 option prices from the basic endpoint,
-    // estimate using put-call parity: box should trade near PV of width
-    // Use ~4.5% as typical risk-free rate estimate
-    const estRate = 0.045;
-    const boxPrice = width * Math.exp(-estRate * dte / 365);
-    const creditPerContract = boxPrice * 100;
+    // Calculate actual box price from the 4 legs using mid prices
+    // Box spread (long): Buy C(K1) + Sell C(K2) + Buy P(K2) + Sell P(K1)
+    // Net debit = C(K1) - C(K2) + P(K2) - P(K1)
+    const c1 = chain[k1]?.call, c2 = chain[k2]?.call;
+    const p1 = chain[k1]?.put, p2 = chain[k2]?.put;
+
+    let boxDebit;
+    if (c1 && c2 && p1 && p2 && c1.mid > 0 && c2.mid > 0 && p1.mid > 0 && p2.mid > 0) {
+      // Use mid prices for fair value estimate
+      boxDebit = (c1.mid - c2.mid) + (p2.mid - p1.mid);
+    } else {
+      // Fallback: estimate from risk-free rate
+      const estRate = 0.045;
+      boxDebit = width * Math.exp(-estRate * dte / 365);
+    }
+
+    const creditPerContract = boxDebit * 100;
     const repayPerContract = width * 100;
     const numContracts = Math.max(1, Math.round(amount / creditPerContract));
     const totalCredit = numContracts * creditPerContract;
     const totalRepay = numContracts * repayPerContract;
 
     loading.classList.add('hidden');
-    displayResults(k1, k2, expiryStr, dte, numContracts, totalCredit, totalRepay, spot);
+    displayResults(k1, k2, bestExp, dte, numContracts, totalCredit, totalRepay, spot);
 
   } catch(e) {
     loading.classList.add('hidden');
