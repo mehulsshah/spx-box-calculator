@@ -68,13 +68,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <label>Time Period (days)</label>
 <div class="duration-btns">
 <button onclick="setDays(30)">30d</button>
-<button onclick="setDays(60)">60d</button>
 <button onclick="setDays(90)">90d</button>
 <button onclick="setDays(180)" class="active">180d</button>
 <button onclick="setDays(365)">1yr</button>
 <button onclick="setDays(730)">2yr</button>
+<button onclick="setDays(1095)">3yr</button>
+<button onclick="setDays(1825)">5yr</button>
 </div>
-<input type="number" id="days" value="180" min="1" max="1095" placeholder="Or enter custom days">
+<input type="number" id="days" value="180" min="1" max="2200" placeholder="Or enter custom days">
 
 <label>Strike Width ($)</label>
 <select id="width">
