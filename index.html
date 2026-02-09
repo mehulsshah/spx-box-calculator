@@ -136,7 +136,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <div class="card">
-<h2>📊 Margin Impact</h2>
+<h2>📊 Margin Impact <span style="font-size:.7rem;color:var(--dim);font-weight:400">(Schwab Portfolio Margin)</span></h2>
 <div class="stat-grid">
 <div class="stat"><div class="val" id="m-acct">—</div><div class="lbl">Account Size</div></div>
 <div class="stat"><div class="val" id="m-req">—</div><div class="lbl">Margin Required</div></div>
@@ -153,6 +153,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 </div>
 <p id="margin-warning" class="note" style="margin-top:8px"></p>
+<div style="margin-top:12px;padding:10px;background:var(--input-bg);border-radius:8px;font-size:.75rem;color:var(--dim);line-height:1.6">
+<strong style="color:var(--text)">Schwab Portfolio Margin Requirements:</strong><br>
+• $125K minimum equity to open · $100K minimum to maintain<br>
+• Stress test: ±15% move on SPX/broad index positions<br>
+• Box spreads: margin ≈ full notional (zero-risk, guaranteed settlement)<br>
+• Must be approved for short uncovered options<br>
+• Accounts below $100K equity → restricted to closing trades only
+</div>
 </div>
 
 <div class="card">
@@ -369,11 +377,12 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
     ? `<span class="savings-highlight">You save ~${fmt(saved)} vs margin loan over ${dte} days</span>`
     : `<span style="color:var(--red)">Box rate exceeds typical margin — check pricing</span>`;
 
-  // Margin Impact
+  // Margin Impact — Schwab Portfolio Margin rules
   const acctSize = parseFloat(document.getElementById('account-size').value) || 500000;
-  const marginReq = repay; // full notional tied up as collateral
+  const marginReq = repay; // full box notional held as collateral
   const marginPct = (marginReq / acctSize) * 100;
   const remaining = Math.max(0, acctSize - marginReq);
+  const postTradeEquity = acctSize - credit + repay; // equity after receiving credit, owing repay
 
   document.getElementById('m-acct').textContent = fmt(acctSize);
   document.getElementById('m-req').textContent = fmt(marginReq);
@@ -385,14 +394,29 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   bar.style.width = Math.min(100, marginPct) + '%';
   bar.style.background = marginPct > 80 ? 'var(--red)' : marginPct > 50 ? '#f59e0b' : 'var(--accent2)';
 
-  const warning = document.getElementById('margin-warning');
-  if (marginPct > 80) {
-    warning.innerHTML = '⚠️ <strong>High margin utilization.</strong> This box trade would use over 80% of your account margin. Consider a smaller position or increasing account size.';
-  } else if (marginPct > 50) {
-    warning.innerHTML = '⚡ <strong>Moderate margin usage.</strong> You\'ll still have room for other positions but monitor closely.';
-  } else {
-    warning.innerHTML = '✅ <strong>Comfortable margin usage.</strong> Plenty of buying power remaining for other positions.';
+  // Schwab-specific warnings
+  const warnings = [];
+  if (acctSize < 125000) {
+    warnings.push('🚫 <strong>Below Schwab minimum.</strong> Portfolio margin requires $125K initial equity. Your account ($' + (acctSize/1000).toFixed(0) + 'K) does not qualify.');
   }
+  if (acctSize >= 125000 && acctSize < 150000) {
+    warnings.push('⚠️ <strong>Near minimum threshold.</strong> Schwab requires $125K to open portfolio margin, but accounts below $100K get restricted to closing trades only. Leave a cushion.');
+  }
+  if (remaining < 100000 && acctSize >= 125000) {
+    warnings.push('⚠️ <strong>Schwab $100K floor.</strong> If account equity drops below $100K, Schwab restricts to closing trades only. Remaining buying power of ' + fmt(remaining) + ' leaves limited buffer.');
+  }
+  if (marginPct > 80) {
+    warnings.push('🔴 <strong>High utilization (' + marginPct.toFixed(0) + '%).</strong> Very little room for market moves or other positions. Risk of margin call if account value drops.');
+  } else if (marginPct > 50) {
+    warnings.push('🟡 <strong>Moderate utilization (' + marginPct.toFixed(0) + '%).</strong> Monitor account equity. Other positions will further reduce buying power.');
+  } else {
+    warnings.push('🟢 <strong>Comfortable utilization (' + marginPct.toFixed(0) + '%).</strong> Plenty of buying power for other positions.');
+  }
+  if (marginReq > 500000) {
+    warnings.push('📋 <strong>Large position.</strong> Schwab may apply additional house requirements on concentrated positions over $500K.');
+  }
+
+  document.getElementById('margin-warning').innerHTML = warnings.join('<br><br>');
 
   document.getElementById('results').style.display = 'block';
 }
