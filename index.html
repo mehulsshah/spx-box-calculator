@@ -164,6 +164,18 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <div class="card">
+<h2>🖥️ thinkorswim Order Entry</h2>
+<p style="font-size:.8rem;color:var(--dim);margin-bottom:12px">Copy these symbols into thinkorswim. Go to Trade → All Products, enter each leg or build as a custom spread.</p>
+<div id="tos-order" style="background:var(--input-bg);border-radius:8px;padding:14px;font-family:monospace;font-size:.8rem;line-height:2;white-space:pre-wrap;word-break:break-all"></div>
+<div style="display:flex;gap:8px;margin-top:10px">
+<button onclick="copyTOS()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:.85rem;cursor:pointer" id="tos-copy-btn">📋 Copy Order Details</button>
+</div>
+<p style="font-size:.7rem;color:var(--dim);margin-top:8px;line-height:1.5">
+<strong>How to enter in TOS:</strong> Trade tab → All Products → type symbol (e.g. .SPXW261231C6900) → right-click option chain → select spread legs → or build custom 4-leg order via Spread Book. Use <strong>LIMIT</strong> order at mid-price as starting point.
+</p>
+</div>
+
+<div class="card">
 <h2>📝 Important Notes</h2>
 <p class="note">
 <strong>European-Style Only:</strong> Use SPX (S&P 500 Index options), NOT SPY. SPX options are European-style (cash-settled, no early assignment risk), which is critical for box spreads. SPY options are American-style and can be assigned early, breaking the trade.<br><br>
@@ -418,7 +430,41 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
 
   document.getElementById('margin-warning').innerHTML = warnings.join('<br><br>');
 
+  // thinkorswim order details
+  function tosSym(strike, type) {
+    const exp = typeof expiry === 'string' && expiry.includes('-') ? expiry : '';
+    if (!exp) return '.SPXW ' + type + strike;
+    const [y, m, d] = exp.split('-');
+    const yy = y.slice(-2);
+    return `.SPXW${yy}${m}${d}${type}${strike}`;
+  }
+
+  const tosText = `═══ SPX BOX SPREAD ORDER ═══
+Expiry: ${expiry} (${dte} DTE) | Width: $${width} | Contracts: ${contracts}
+
+Leg 1: BUY  ${contracts} ${tosSym(k1,'C')}  (Call ${fmt(k1)})
+Leg 2: SELL ${contracts} ${tosSym(k2,'C')}  (Call ${fmt(k2)})
+Leg 3: BUY  ${contracts} ${tosSym(k2,'P')}  (Put ${fmt(k2)})
+Leg 4: SELL ${contracts} ${tosSym(k1,'P')}  (Put ${fmt(k1)})
+
+Order Type: LIMIT (4-leg combo, NET DEBIT)
+Net Debit: ~${fmtDec(credit/contracts/100)} per spread
+Total Debit: ~${fmt(credit)}
+Max Value at Expiry: ${fmt(repay)}
+Implied Rate: ${pct(impliedRate)}`;
+
+  document.getElementById('tos-order').textContent = tosText;
+
   document.getElementById('results').style.display = 'block';
+}
+
+function copyTOS() {
+  const text = document.getElementById('tos-order').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('tos-copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = '📋 Copy Order Details'; }, 2000);
+  });
 }
 
 // Set default expiry date for manual mode
