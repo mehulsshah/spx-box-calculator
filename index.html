@@ -59,6 +59,9 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <button onclick="setMode('manual')">Manual Entry</button>
 </div>
 
+<label>Account Size ($) <span style="color:var(--dim);font-size:.75rem">— for margin impact</span></label>
+<input type="number" id="account-size" value="500000" min="1000" step="1000">
+
 <label>Amount to Borrow ($)</label>
 <input type="number" id="amount" value="100000" min="1000" step="1000">
 
@@ -130,6 +133,26 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 </div>
 <div id="savings" style="text-align:center;margin-top:12px"></div>
+</div>
+
+<div class="card">
+<h2>📊 Margin Impact</h2>
+<div class="stat-grid">
+<div class="stat"><div class="val" id="m-acct">—</div><div class="lbl">Account Size</div></div>
+<div class="stat"><div class="val" id="m-req">—</div><div class="lbl">Margin Required</div></div>
+<div class="stat"><div class="val" id="m-used">—</div><div class="lbl">% Margin Used</div></div>
+<div class="stat"><div class="val" id="m-remain">—</div><div class="lbl">Remaining Buying Power</div></div>
+</div>
+<div id="margin-bar-container" style="margin-top:12px">
+<div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--dim);margin-bottom:4px">
+<span>Margin Utilization</span>
+<span id="m-pct-label">0%</span>
+</div>
+<div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
+<div id="m-bar" style="height:100%;border-radius:6px;transition:width .3s;width:0%"></div>
+</div>
+</div>
+<p id="margin-warning" class="note" style="margin-top:8px"></p>
 </div>
 
 <div class="card">
@@ -345,6 +368,31 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   document.getElementById('savings').innerHTML = saved > 0
     ? `<span class="savings-highlight">You save ~${fmt(saved)} vs margin loan over ${dte} days</span>`
     : `<span style="color:var(--red)">Box rate exceeds typical margin — check pricing</span>`;
+
+  // Margin Impact
+  const acctSize = parseFloat(document.getElementById('account-size').value) || 500000;
+  const marginReq = repay; // full notional tied up as collateral
+  const marginPct = (marginReq / acctSize) * 100;
+  const remaining = Math.max(0, acctSize - marginReq);
+
+  document.getElementById('m-acct').textContent = fmt(acctSize);
+  document.getElementById('m-req').textContent = fmt(marginReq);
+  document.getElementById('m-used').textContent = marginPct.toFixed(1) + '%';
+  document.getElementById('m-remain').textContent = fmt(remaining);
+  document.getElementById('m-pct-label').textContent = marginPct.toFixed(1) + '%';
+
+  const bar = document.getElementById('m-bar');
+  bar.style.width = Math.min(100, marginPct) + '%';
+  bar.style.background = marginPct > 80 ? 'var(--red)' : marginPct > 50 ? '#f59e0b' : 'var(--accent2)';
+
+  const warning = document.getElementById('margin-warning');
+  if (marginPct > 80) {
+    warning.innerHTML = '⚠️ <strong>High margin utilization.</strong> This box trade would use over 80% of your account margin. Consider a smaller position or increasing account size.';
+  } else if (marginPct > 50) {
+    warning.innerHTML = '⚡ <strong>Moderate margin usage.</strong> You\'ll still have room for other positions but monitor closely.';
+  } else {
+    warning.innerHTML = '✅ <strong>Comfortable margin usage.</strong> Plenty of buying power remaining for other positions.';
+  }
 
   document.getElementById('results').style.display = 'block';
 }
