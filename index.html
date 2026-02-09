@@ -182,6 +182,16 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </p>
 </div>
 
+<div class="card" id="rate-compare-card" style="display:none">
+<h2>📊 Rate Comparison by Strike Width</h2>
+<p style="font-size:.8rem;color:var(--dim);margin-bottom:12px">Implied annual rates vary by width. Click a row to recalculate with that width.</p>
+<table class="legs-table" id="rate-compare-table">
+<thead><tr><th>Width</th><th>Strikes</th><th>Implied Rate</th><th>Interest Cost</th><th>Contracts</th><th></th></tr></thead>
+<tbody id="rate-compare-body"></tbody>
+</table>
+<p class="note" style="margin-top:8px">💡 Wider boxes often have slightly different rates due to liquidity and strike availability. The <span style="color:var(--accent2)">lowest rate</span> is highlighted.</p>
+</div>
+
 <div class="card">
 <h2>📝 Important Notes</h2>
 <p class="note">
@@ -198,6 +208,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <script>
 let mode = 'auto';
 let selectedDays = 180;
+let lastCBOEData = null; // cached for rate comparison
 
 function setMode(m) {
   mode = m;
@@ -274,6 +285,9 @@ function calcManual(amount, days, width) {
   const totalRepay = numContracts * repayPerContract;
 
   displayResults(k1, k2, expiryStr || `~${dte} days`, dte, numContracts, totalCredit, totalRepay);
+  // Build rate comparison using estimate for manual mode
+  const spxPrice = parseFloat(document.getElementById('spx-price').value) || 6050;
+  buildManualRateComparison(spxPrice, dte, amount, k2 - k1, boxDebit / (k2 - k1));
 }
 
 async function calcAuto(amount, days, width) {
@@ -346,7 +360,9 @@ async function calcAuto(amount, days, width) {
     const totalRepay = numContracts * repayPerContract;
 
     loading.classList.add('hidden');
+    lastCBOEData = { spot, chain, dte, bestExp, amount };
     displayResults(k1, k2, bestExp, dte, numContracts, totalCredit, totalRepay, spot);
+    buildRateComparison(spot, chain, dte, bestExp, amount);
 
   } catch(e) {
     loading.classList.add('hidden');
@@ -482,6 +498,103 @@ function copyTOS() {
     btn.textContent = '✅ Copied!';
     setTimeout(() => { btn.textContent = '📋 Copy Order Details'; }, 2000);
   });
+}
+
+function buildRateComparison(spot, chain, dte, bestExp, amount) {
+  const widths = [50, 100, 200, 500, 1000];
+  const selectedWidth = parseInt(document.getElementById('width').value);
+  const rows = [];
+
+  for (const w of widths) {
+    const k1 = Math.floor(spot / w) * w;
+    const k2 = k1 + w;
+    const c1 = chain[k1]?.call, c2 = chain[k2]?.call;
+    const p1 = chain[k1]?.put, p2 = chain[k2]?.put;
+
+    let boxDebit, source;
+    if (c1 && c2 && p1 && p2 && c1.mid > 0 && c2.mid > 0 && p1.mid > 0 && p2.mid > 0) {
+      boxDebit = (c1.mid - c2.mid) + (p2.mid - p1.mid);
+      source = 'market';
+    } else {
+      const estRate = 0.045;
+      boxDebit = w * Math.exp(-estRate * dte / 365);
+      source = 'est';
+    }
+
+    const creditPerContract = boxDebit * 100;
+    const repayPerContract = w * 100;
+    const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+    const totalCredit = numContracts * creditPerContract;
+    const totalRepay = numContracts * repayPerContract;
+    const interest = totalRepay - totalCredit;
+    const impliedRate = (totalRepay / totalCredit - 1) * (365 / dte);
+
+    rows.push({ w, k1, k2, impliedRate, interest, numContracts, source, selected: w === selectedWidth });
+  }
+
+  const minRate = Math.min(...rows.map(r => r.impliedRate));
+  const tbody = document.getElementById('rate-compare-body');
+  tbody.innerHTML = rows.map(r => {
+    const isBest = Math.abs(r.impliedRate - minRate) < 0.0001;
+    const isSelected = r.selected;
+    const rateColor = isBest ? 'color:var(--accent2);font-weight:700' : '';
+    const rowBg = isSelected ? 'background:rgba(79,143,247,0.15)' : '';
+    const estTag = r.source === 'est' ? ' <span style="color:var(--dim);font-size:.7rem">(est)</span>' : '';
+    const bestTag = isBest && !isSelected ? ' <span style="color:var(--accent2);font-size:.7rem">★ lowest</span>' : '';
+    const selectBtn = isSelected ? '<span style="color:var(--accent);font-size:.75rem">● selected</span>' : `<button onclick="selectWidth(${r.w})" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--accent);font-size:.75rem;cursor:pointer">Select</button>`;
+    return `<tr style="${rowBg};cursor:pointer" onclick="selectWidth(${r.w})">
+      <td><strong>$${r.w.toLocaleString()}</strong></td>
+      <td style="font-size:.8rem;color:var(--dim)">${r.k1.toLocaleString()} / ${r.k2.toLocaleString()}</td>
+      <td style="${rateColor}">${pct(r.impliedRate)}${estTag}${bestTag}</td>
+      <td>${fmt(r.interest)}</td>
+      <td>${r.numContracts}</td>
+      <td>${selectBtn}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('rate-compare-card').style.display = 'block';
+}
+
+function buildManualRateComparison(spot, dte, amount, currentWidth, debitRatio) {
+  // debitRatio = boxDebit / width for the current config; apply same ratio to other widths
+  const widths = [50, 100, 200, 500, 1000];
+  const rows = [];
+  for (const w of widths) {
+    const k1 = Math.floor(spot / w) * w;
+    const k2 = k1 + w;
+    const boxDebit = w * debitRatio;
+    const creditPerContract = boxDebit * 100;
+    const repayPerContract = w * 100;
+    const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+    const totalCredit = numContracts * creditPerContract;
+    const totalRepay = numContracts * repayPerContract;
+    const interest = totalRepay - totalCredit;
+    const impliedRate = (totalRepay / totalCredit - 1) * (365 / dte);
+    rows.push({ w, k1, k2, impliedRate, interest, numContracts, source: w === currentWidth ? 'input' : 'est', selected: w === currentWidth });
+  }
+  const minRate = Math.min(...rows.map(r => r.impliedRate));
+  const tbody = document.getElementById('rate-compare-body');
+  tbody.innerHTML = rows.map(r => {
+    const isBest = Math.abs(r.impliedRate - minRate) < 0.0001;
+    const rateColor = isBest ? 'color:var(--accent2);font-weight:700' : '';
+    const rowBg = r.selected ? 'background:rgba(79,143,247,0.15)' : '';
+    const bestTag = isBest && !r.selected ? ' <span style="color:var(--accent2);font-size:.7rem">★ lowest</span>' : '';
+    const selectBtn = r.selected ? '<span style="color:var(--accent);font-size:.75rem">● selected</span>' : `<button onclick="selectWidth(${r.w})" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--accent);font-size:.75rem;cursor:pointer">Select</button>`;
+    return `<tr style="${rowBg}" onclick="selectWidth(${r.w})">
+      <td><strong>$${r.w.toLocaleString()}</strong></td>
+      <td style="font-size:.8rem;color:var(--dim)">${r.k1.toLocaleString()} / ${r.k2.toLocaleString()}</td>
+      <td style="${rateColor}">${pct(r.impliedRate)}${bestTag}</td>
+      <td>${fmt(r.interest)}</td>
+      <td>${r.numContracts}</td>
+      <td>${selectBtn}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rate-compare-card').style.display = 'block';
+}
+
+function selectWidth(w) {
+  document.getElementById('width').value = w;
+  calculate();
 }
 
 // Set default expiry date for manual mode

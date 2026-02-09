@@ -55,9 +55,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div class="card">
 <h2>Configuration</h2>
 <div class="mode-toggle">
-<button class="active" onclick="setMode('auto')">Auto (Yahoo Finance)</button>
+<button class="active" onclick="setMode('auto')">Auto (CBOE Data)</button>
 <button onclick="setMode('manual')">Manual Entry</button>
 </div>
+
+<label>Account Size ($) <span style="color:var(--dim);font-size:.75rem">— optional, for margin impact analysis</span></label>
+<input type="number" id="account-size" placeholder="Optional — enter to see margin impact" min="1000" step="1000">
 
 <label>Amount to Borrow ($)</label>
 <input type="number" id="amount" value="100000" min="1000" step="1000">
@@ -65,13 +68,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <label>Time Period (days)</label>
 <div class="duration-btns">
 <button onclick="setDays(30)">30d</button>
-<button onclick="setDays(60)">60d</button>
 <button onclick="setDays(90)">90d</button>
 <button onclick="setDays(180)" class="active">180d</button>
 <button onclick="setDays(365)">1yr</button>
 <button onclick="setDays(730)">2yr</button>
+<button onclick="setDays(1095)">3yr</button>
+<button onclick="setDays(1825)">5yr</button>
 </div>
-<input type="number" id="days" value="180" min="1" max="1095" placeholder="Or enter custom days">
+<input type="number" id="days" value="180" min="1" max="2200" placeholder="Or enter custom days">
 
 <label>Strike Width ($)</label>
 <select id="width">
@@ -99,14 +103,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 
 <div id="error" class="error hidden"></div>
-<div id="loading" class="status hidden">Fetching SPX options data...</div>
+<div id="loading" class="status hidden">Fetching SPX options data from CBOE...</div>
 
 <div id="results">
 <div class="card">
 <h2>📊 Box Spread Structure</h2>
 <div id="expiry-info" style="font-size:.85rem;color:var(--dim);margin-bottom:8px"></div>
 <table class="legs-table">
-<thead><tr><th>Leg</th><th>Type</th><th>Strike</th><th>Action</th></tr></thead>
+<thead><tr><th>Leg</th><th>Ticker</th><th>Type</th><th>Strike</th><th>Action</th></tr></thead>
 <tbody id="legs-body"></tbody>
 </table>
 <div id="contracts-info" style="font-size:.9rem;margin-top:8px"></div>
@@ -133,6 +137,61 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div id="savings" style="text-align:center;margin-top:12px"></div>
 </div>
 
+<div class="card" id="margin-card">
+<h2>📊 Margin Impact <span style="font-size:.7rem;color:var(--dim);font-weight:400">(Schwab Portfolio Margin)</span></h2>
+<div id="margin-prompt" style="text-align:center;padding:20px 0;color:var(--dim);font-size:.9rem;display:none">
+💡 Enter your <strong style="color:var(--text)">Account Size</strong> above to see margin utilization, buying power, and Schwab-specific warnings.
+</div>
+<div id="margin-details">
+<div class="stat-grid">
+<div class="stat"><div class="val" id="m-acct">—</div><div class="lbl">Account Size</div></div>
+<div class="stat"><div class="val" id="m-req">—</div><div class="lbl">Margin Required</div></div>
+<div class="stat"><div class="val" id="m-used">—</div><div class="lbl">% Margin Used</div></div>
+<div class="stat"><div class="val" id="m-remain">—</div><div class="lbl">Remaining Buying Power</div></div>
+</div>
+<div id="margin-bar-container" style="margin-top:12px">
+<div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--dim);margin-bottom:4px">
+<span>Margin Utilization</span>
+<span id="m-pct-label">0%</span>
+</div>
+<div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
+<div id="m-bar" style="height:100%;border-radius:6px;transition:width .3s;width:0%"></div>
+</div>
+</div>
+<p id="margin-warning" class="note" style="margin-top:8px"></p>
+</div>
+<div style="margin-top:12px;padding:10px;background:var(--input-bg);border-radius:8px;font-size:.75rem;color:var(--dim);line-height:1.6">
+<strong style="color:var(--text)">Schwab Portfolio Margin Requirements:</strong><br>
+• $125K minimum equity to open · $100K minimum to maintain<br>
+• Stress test: ±15% move on SPX/broad index positions<br>
+• Box spreads: margin ≈ full notional (zero-risk, guaranteed settlement)<br>
+• Must be approved for short uncovered options<br>
+• Accounts below $100K equity → restricted to closing trades only
+</div>
+</div>
+
+<div class="card">
+<h2>🖥️ thinkorswim Order Entry</h2>
+<p style="font-size:.8rem;color:var(--dim);margin-bottom:12px">Copy these symbols into thinkorswim. Go to Trade → All Products, enter each leg or build as a custom spread.</p>
+<div id="tos-order" style="background:var(--input-bg);border-radius:8px;padding:14px;font-family:monospace;font-size:.8rem;line-height:2;white-space:pre-wrap;word-break:break-all"></div>
+<div style="display:flex;gap:8px;margin-top:10px">
+<button onclick="copyTOS()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:.85rem;cursor:pointer" id="tos-copy-btn">📋 Copy Order Details</button>
+</div>
+<p style="font-size:.7rem;color:var(--dim);margin-top:8px;line-height:1.5">
+<strong>How to enter in TOS:</strong> Trade tab → All Products → type symbol (e.g. .SPXW261231C6900) → right-click option chain → select spread legs → or build custom 4-leg order via Spread Book. Use <strong>LIMIT</strong> order at mid-price as starting point.
+</p>
+</div>
+
+<div class="card" id="rate-compare-card" style="display:none">
+<h2>📊 Rate Comparison by Strike Width</h2>
+<p style="font-size:.8rem;color:var(--dim);margin-bottom:12px">Implied annual rates vary by width. Click a row to recalculate with that width.</p>
+<table class="legs-table" id="rate-compare-table">
+<thead><tr><th>Width</th><th>Strikes</th><th>Implied Rate</th><th>Interest Cost</th><th>Contracts</th><th></th></tr></thead>
+<tbody id="rate-compare-body"></tbody>
+</table>
+<p class="note" style="margin-top:8px">💡 Wider boxes often have slightly different rates due to liquidity and strike availability. The <span style="color:var(--accent2)">lowest rate</span> is highlighted.</p>
+</div>
+
 <div class="card">
 <h2>📝 Important Notes</h2>
 <p class="note">
@@ -149,6 +208,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <script>
 let mode = 'auto';
 let selectedDays = 180;
+let lastCBOEData = null; // cached for rate comparison
 
 function setMode(m) {
   mode = m;
@@ -225,6 +285,9 @@ function calcManual(amount, days, width) {
   const totalRepay = numContracts * repayPerContract;
 
   displayResults(k1, k2, expiryStr || `~${dte} days`, dte, numContracts, totalCredit, totalRepay);
+  // Build rate comparison using estimate for manual mode
+  const spxPrice = parseFloat(document.getElementById('spx-price').value) || 6050;
+  buildManualRateComparison(spxPrice, dte, amount, k2 - k1, boxDebit / (k2 - k1));
 }
 
 async function calcAuto(amount, days, width) {
@@ -233,53 +296,73 @@ async function calcAuto(amount, days, width) {
   document.getElementById('results').style.display = 'none';
 
   try {
-    // Fetch via backend proxy (avoids CORS)
-    let data = null;
-    try {
-      const r = await fetch('/api/options');
-      if (r.ok) { data = await r.json(); }
-    } catch(e) { /* fall through */ }
-
-    if (!data || !data.optionChain?.result?.[0]) {
+    const r = await fetch('/api/options');
+    if (!r.ok) {
       loading.classList.add('hidden');
-      showError('Cannot fetch options data from server. Try Manual Entry mode.');
+      showError('Cannot fetch options data. Try Manual Entry mode.');
+      return;
+    }
+    const data = await r.json();
+    if (!data.spot || !data.expirations?.length) {
+      loading.classList.add('hidden');
+      showError(data.error || 'No options data returned. Try Manual Entry mode.');
       return;
     }
 
-    const result = data.optionChain.result[0];
-    const spot = result.quote.regularMarketPrice;
-    const expirations = result.expirationDates; // epoch seconds
+    const spot = data.spot;
 
     // Find closest expiry to desired days
-    const targetEpoch = Math.floor(Date.now()/1000) + days * 86400;
-    let bestExp = expirations[0], bestDiff = Math.abs(expirations[0] - targetEpoch);
-    for (const exp of expirations) {
-      const diff = Math.abs(exp - targetEpoch);
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+    const targetStr = targetDate.toISOString().split('T')[0];
+
+    let bestExp = data.expirations[0];
+    let bestDiff = Math.abs(new Date(data.expirations[0]) - targetDate);
+    for (const exp of data.expirations) {
+      const diff = Math.abs(new Date(exp) - targetDate);
       if (diff < bestDiff) { bestDiff = diff; bestExp = exp; }
     }
 
-    const expDate = new Date(bestExp * 1000);
-    const dte = Math.round((bestExp - Date.now()/1000) / 86400);
-    const expiryStr = expDate.toISOString().split('T')[0];
+    const dte = Math.round((new Date(bestExp) - new Date()) / 86400000);
+    const chain = data.chains[bestExp];
+    if (!chain) {
+      loading.classList.add('hidden');
+      showError('No chain data for selected expiry. Try Manual Entry.');
+      return;
+    }
 
-    // Choose strikes near ATM, rounded to width
-    const k1 = Math.round(spot / width) * width - width;
-    const k2 = k1 + width;
+    // Choose strikes near ATM
+    const strikes = Object.keys(chain).map(Number).sort((a,b) => a - b);
+    // Find K1 as the largest strike <= spot that aligns with width
+    let k1 = Math.floor(spot / width) * width;
+    let k2 = k1 + width;
 
-    // Estimate box price using risk-free rate approximation
-    // Since we can't easily get all 4 option prices from the basic endpoint,
-    // estimate using put-call parity: box should trade near PV of width
-    // Use ~4.5% as typical risk-free rate estimate
-    const estRate = 0.045;
-    const boxPrice = width * Math.exp(-estRate * dte / 365);
-    const creditPerContract = boxPrice * 100;
+    // Calculate actual box price from the 4 legs using mid prices
+    // Box spread (long): Buy C(K1) + Sell C(K2) + Buy P(K2) + Sell P(K1)
+    // Net debit = C(K1) - C(K2) + P(K2) - P(K1)
+    const c1 = chain[k1]?.call, c2 = chain[k2]?.call;
+    const p1 = chain[k1]?.put, p2 = chain[k2]?.put;
+
+    let boxDebit;
+    if (c1 && c2 && p1 && p2 && c1.mid > 0 && c2.mid > 0 && p1.mid > 0 && p2.mid > 0) {
+      // Use mid prices for fair value estimate
+      boxDebit = (c1.mid - c2.mid) + (p2.mid - p1.mid);
+    } else {
+      // Fallback: estimate from risk-free rate
+      const estRate = 0.045;
+      boxDebit = width * Math.exp(-estRate * dte / 365);
+    }
+
+    const creditPerContract = boxDebit * 100;
     const repayPerContract = width * 100;
     const numContracts = Math.max(1, Math.round(amount / creditPerContract));
     const totalCredit = numContracts * creditPerContract;
     const totalRepay = numContracts * repayPerContract;
 
     loading.classList.add('hidden');
-    displayResults(k1, k2, expiryStr, dte, numContracts, totalCredit, totalRepay, spot);
+    lastCBOEData = { spot, chain, dte, bestExp, amount };
+    displayResults(k1, k2, bestExp, dte, numContracts, totalCredit, totalRepay, spot);
+    buildRateComparison(spot, chain, dte, bestExp, amount);
 
   } catch(e) {
     loading.classList.add('hidden');
@@ -293,13 +376,23 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   const impliedRate = (repay / credit - 1) * (365 / dte);
   const marginRate = 0.11;
 
+  // Generate OCC option symbols: SPXW YYMMDD C/P SSSSSSSS (strike * 1000, 8 digits)
+  function occSym(strike, type) {
+    const exp = typeof expiry === 'string' && expiry.includes('-') ? expiry : '';
+    if (!exp) return `SPXW ${type}${strike}`;
+    const [y, m, d] = exp.split('-');
+    const yy = y.slice(-2);
+    const s = String(Math.round(strike * 1000)).padStart(8, '0');
+    return `SPXW${yy}${m}${d}${type}${s}`;
+  }
+
   document.getElementById('expiry-info').innerHTML = `Expiry: <strong>${expiry}</strong> · ${dte} DTE${spot ? ` · SPX: ${fmt(spot)}` : ''} · Width: $${width}`;
 
   document.getElementById('legs-body').innerHTML = `
-    <tr><td>1</td><td>Call</td><td>${fmt(k1)}</td><td class="buy">BUY</td></tr>
-    <tr><td>2</td><td>Call</td><td>${fmt(k2)}</td><td class="sell">SELL</td></tr>
-    <tr><td>3</td><td>Put</td><td>${fmt(k2)}</td><td class="buy">BUY</td></tr>
-    <tr><td>4</td><td>Put</td><td>${fmt(k1)}</td><td class="sell">SELL</td></tr>`;
+    <tr><td>1</td><td style="font-family:monospace;font-size:.75rem">${occSym(k1,'C')}</td><td>Call</td><td>${fmt(k1)}</td><td class="buy">BUY</td></tr>
+    <tr><td>2</td><td style="font-family:monospace;font-size:.75rem">${occSym(k2,'C')}</td><td>Call</td><td>${fmt(k2)}</td><td class="sell">SELL</td></tr>
+    <tr><td>3</td><td style="font-family:monospace;font-size:.75rem">${occSym(k2,'P')}</td><td>Put</td><td>${fmt(k2)}</td><td class="buy">BUY</td></tr>
+    <tr><td>4</td><td style="font-family:monospace;font-size:.75rem">${occSym(k1,'P')}</td><td>Put</td><td>${fmt(k1)}</td><td class="sell">SELL</td></tr>`;
 
   document.getElementById('contracts-info').innerHTML = `<strong>${contracts}</strong> contract${contracts>1?'s':''} × $${width} wide = ${fmt(repay)} notional at expiry`;
 
@@ -319,7 +412,189 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
     ? `<span class="savings-highlight">You save ~${fmt(saved)} vs margin loan over ${dte} days</span>`
     : `<span style="color:var(--red)">Box rate exceeds typical margin — check pricing</span>`;
 
+  // Margin Impact — Schwab Portfolio Margin rules
+  const acctSizeVal = document.getElementById('account-size').value;
+  const acctSize = parseFloat(acctSizeVal);
+  const marginPrompt = document.getElementById('margin-prompt');
+  const marginDetails = document.getElementById('margin-details');
+  if (!acctSizeVal || !acctSize || acctSize <= 0) {
+    marginPrompt.style.display = 'block';
+    marginDetails.style.display = 'none';
+  } else {
+    marginPrompt.style.display = 'none';
+    marginDetails.style.display = 'block';
+  const marginReq = repay; // full box notional held as collateral
+  const marginPct = (marginReq / acctSize) * 100;
+  const remaining = Math.max(0, acctSize - marginReq);
+  const postTradeEquity = acctSize - credit + repay; // equity after receiving credit, owing repay
+
+  document.getElementById('m-acct').textContent = fmt(acctSize);
+  document.getElementById('m-req').textContent = fmt(marginReq);
+  document.getElementById('m-used').textContent = marginPct.toFixed(1) + '%';
+  document.getElementById('m-remain').textContent = fmt(remaining);
+  document.getElementById('m-pct-label').textContent = marginPct.toFixed(1) + '%';
+
+  const bar = document.getElementById('m-bar');
+  bar.style.width = Math.min(100, marginPct) + '%';
+  bar.style.background = marginPct > 80 ? 'var(--red)' : marginPct > 50 ? '#f59e0b' : 'var(--accent2)';
+
+  // Schwab-specific warnings
+  const warnings = [];
+  if (acctSize < 125000) {
+    warnings.push('🚫 <strong>Below Schwab minimum.</strong> Portfolio margin requires $125K initial equity. Your account ($' + (acctSize/1000).toFixed(0) + 'K) does not qualify.');
+  }
+  if (acctSize >= 125000 && acctSize < 150000) {
+    warnings.push('⚠️ <strong>Near minimum threshold.</strong> Schwab requires $125K to open portfolio margin, but accounts below $100K get restricted to closing trades only. Leave a cushion.');
+  }
+  if (remaining < 100000 && acctSize >= 125000) {
+    warnings.push('⚠️ <strong>Schwab $100K floor.</strong> If account equity drops below $100K, Schwab restricts to closing trades only. Remaining buying power of ' + fmt(remaining) + ' leaves limited buffer.');
+  }
+  if (marginPct > 80) {
+    warnings.push('🔴 <strong>High utilization (' + marginPct.toFixed(0) + '%).</strong> Very little room for market moves or other positions. Risk of margin call if account value drops.');
+  } else if (marginPct > 50) {
+    warnings.push('🟡 <strong>Moderate utilization (' + marginPct.toFixed(0) + '%).</strong> Monitor account equity. Other positions will further reduce buying power.');
+  } else {
+    warnings.push('🟢 <strong>Comfortable utilization (' + marginPct.toFixed(0) + '%).</strong> Plenty of buying power for other positions.');
+  }
+  if (marginReq > 500000) {
+    warnings.push('📋 <strong>Large position.</strong> Schwab may apply additional house requirements on concentrated positions over $500K.');
+  }
+
+  document.getElementById('margin-warning').innerHTML = warnings.join('<br><br>');
+  } // end margin card
+
+  // thinkorswim order details
+  function tosSym(strike, type) {
+    const exp = typeof expiry === 'string' && expiry.includes('-') ? expiry : '';
+    if (!exp) return '.SPXW ' + type + strike;
+    const [y, m, d] = exp.split('-');
+    const yy = y.slice(-2);
+    return `.SPXW${yy}${m}${d}${type}${strike}`;
+  }
+
+  const tosText = `═══ SPX BOX SPREAD ORDER ═══
+Expiry: ${expiry} (${dte} DTE) | Width: $${width} | Contracts: ${contracts}
+
+Leg 1: BUY  ${contracts} ${tosSym(k1,'C')}  (Call ${fmt(k1)})
+Leg 2: SELL ${contracts} ${tosSym(k2,'C')}  (Call ${fmt(k2)})
+Leg 3: BUY  ${contracts} ${tosSym(k2,'P')}  (Put ${fmt(k2)})
+Leg 4: SELL ${contracts} ${tosSym(k1,'P')}  (Put ${fmt(k1)})
+
+Order Type: LIMIT (4-leg combo, NET DEBIT)
+Net Debit: ~${fmtDec(credit/contracts/100)} per spread
+Total Debit: ~${fmt(credit)}
+Max Value at Expiry: ${fmt(repay)}
+Implied Rate: ${pct(impliedRate)}`;
+
+  document.getElementById('tos-order').textContent = tosText;
+
   document.getElementById('results').style.display = 'block';
+}
+
+function copyTOS() {
+  const text = document.getElementById('tos-order').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('tos-copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = '📋 Copy Order Details'; }, 2000);
+  });
+}
+
+function buildRateComparison(spot, chain, dte, bestExp, amount) {
+  const widths = [50, 100, 200, 500, 1000];
+  const selectedWidth = parseInt(document.getElementById('width').value);
+  const rows = [];
+
+  for (const w of widths) {
+    const k1 = Math.floor(spot / w) * w;
+    const k2 = k1 + w;
+    const c1 = chain[k1]?.call, c2 = chain[k2]?.call;
+    const p1 = chain[k1]?.put, p2 = chain[k2]?.put;
+
+    let boxDebit, source;
+    if (c1 && c2 && p1 && p2 && c1.mid > 0 && c2.mid > 0 && p1.mid > 0 && p2.mid > 0) {
+      boxDebit = (c1.mid - c2.mid) + (p2.mid - p1.mid);
+      source = 'market';
+    } else {
+      const estRate = 0.045;
+      boxDebit = w * Math.exp(-estRate * dte / 365);
+      source = 'est';
+    }
+
+    const creditPerContract = boxDebit * 100;
+    const repayPerContract = w * 100;
+    const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+    const totalCredit = numContracts * creditPerContract;
+    const totalRepay = numContracts * repayPerContract;
+    const interest = totalRepay - totalCredit;
+    const impliedRate = (totalRepay / totalCredit - 1) * (365 / dte);
+
+    rows.push({ w, k1, k2, impliedRate, interest, numContracts, source, selected: w === selectedWidth });
+  }
+
+  const minRate = Math.min(...rows.map(r => r.impliedRate));
+  const tbody = document.getElementById('rate-compare-body');
+  tbody.innerHTML = rows.map(r => {
+    const isBest = Math.abs(r.impliedRate - minRate) < 0.0001;
+    const isSelected = r.selected;
+    const rateColor = isBest ? 'color:var(--accent2);font-weight:700' : '';
+    const rowBg = isSelected ? 'background:rgba(79,143,247,0.15)' : '';
+    const estTag = r.source === 'est' ? ' <span style="color:var(--dim);font-size:.7rem">(est)</span>' : '';
+    const bestTag = isBest && !isSelected ? ' <span style="color:var(--accent2);font-size:.7rem">★ lowest</span>' : '';
+    const selectBtn = isSelected ? '<span style="color:var(--accent);font-size:.75rem">● selected</span>' : `<button onclick="selectWidth(${r.w})" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--accent);font-size:.75rem;cursor:pointer">Select</button>`;
+    return `<tr style="${rowBg};cursor:pointer" onclick="selectWidth(${r.w})">
+      <td><strong>$${r.w.toLocaleString()}</strong></td>
+      <td style="font-size:.8rem;color:var(--dim)">${r.k1.toLocaleString()} / ${r.k2.toLocaleString()}</td>
+      <td style="${rateColor}">${pct(r.impliedRate)}${estTag}${bestTag}</td>
+      <td>${fmt(r.interest)}</td>
+      <td>${r.numContracts}</td>
+      <td>${selectBtn}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('rate-compare-card').style.display = 'block';
+}
+
+function buildManualRateComparison(spot, dte, amount, currentWidth, debitRatio) {
+  // debitRatio = boxDebit / width for the current config; apply same ratio to other widths
+  const widths = [50, 100, 200, 500, 1000];
+  const rows = [];
+  for (const w of widths) {
+    const k1 = Math.floor(spot / w) * w;
+    const k2 = k1 + w;
+    const boxDebit = w * debitRatio;
+    const creditPerContract = boxDebit * 100;
+    const repayPerContract = w * 100;
+    const numContracts = Math.max(1, Math.round(amount / creditPerContract));
+    const totalCredit = numContracts * creditPerContract;
+    const totalRepay = numContracts * repayPerContract;
+    const interest = totalRepay - totalCredit;
+    const impliedRate = (totalRepay / totalCredit - 1) * (365 / dte);
+    rows.push({ w, k1, k2, impliedRate, interest, numContracts, source: w === currentWidth ? 'input' : 'est', selected: w === currentWidth });
+  }
+  const minRate = Math.min(...rows.map(r => r.impliedRate));
+  const tbody = document.getElementById('rate-compare-body');
+  tbody.innerHTML = rows.map(r => {
+    const isBest = Math.abs(r.impliedRate - minRate) < 0.0001;
+    const rateColor = isBest ? 'color:var(--accent2);font-weight:700' : '';
+    const rowBg = r.selected ? 'background:rgba(79,143,247,0.15)' : '';
+    const bestTag = isBest && !r.selected ? ' <span style="color:var(--accent2);font-size:.7rem">★ lowest</span>' : '';
+    const selectBtn = r.selected ? '<span style="color:var(--accent);font-size:.75rem">● selected</span>' : `<button onclick="selectWidth(${r.w})" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--accent);font-size:.75rem;cursor:pointer">Select</button>`;
+    return `<tr style="${rowBg}" onclick="selectWidth(${r.w})">
+      <td><strong>$${r.w.toLocaleString()}</strong></td>
+      <td style="font-size:.8rem;color:var(--dim)">${r.k1.toLocaleString()} / ${r.k2.toLocaleString()}</td>
+      <td style="${rateColor}">${pct(r.impliedRate)}${bestTag}</td>
+      <td>${fmt(r.interest)}</td>
+      <td>${r.numContracts}</td>
+      <td>${selectBtn}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rate-compare-card').style.display = 'block';
+}
+
+function selectWidth(w) {
+  document.getElementById('width').value = w;
+  calculate();
 }
 
 // Set default expiry date for manual mode
