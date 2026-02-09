@@ -135,8 +135,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div id="savings" style="text-align:center;margin-top:12px"></div>
 </div>
 
-<div class="card" id="margin-card" style="display:none">
+<div class="card" id="margin-card">
 <h2>📊 Margin Impact <span style="font-size:.7rem;color:var(--dim);font-weight:400">(Schwab Portfolio Margin)</span></h2>
+<div id="margin-prompt" style="text-align:center;padding:20px 0;color:var(--dim);font-size:.9rem;display:none">
+💡 Enter your <strong style="color:var(--text)">Account Size</strong> above to see margin utilization, buying power, and Schwab-specific warnings.
+</div>
+<div id="margin-details">
 <div class="stat-grid">
 <div class="stat"><div class="val" id="m-acct">—</div><div class="lbl">Account Size</div></div>
 <div class="stat"><div class="val" id="m-req">—</div><div class="lbl">Margin Required</div></div>
@@ -153,6 +157,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 </div>
 </div>
 <p id="margin-warning" class="note" style="margin-top:8px"></p>
+</div>
 <div style="margin-top:12px;padding:10px;background:var(--input-bg);border-radius:8px;font-size:.75rem;color:var(--dim);line-height:1.6">
 <strong style="color:var(--text)">Schwab Portfolio Margin Requirements:</strong><br>
 • $125K minimum equity to open · $100K minimum to maintain<br>
@@ -392,11 +397,14 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   // Margin Impact — Schwab Portfolio Margin rules
   const acctSizeVal = document.getElementById('account-size').value;
   const acctSize = parseFloat(acctSizeVal);
-  const marginCard = document.getElementById('margin-card');
+  const marginPrompt = document.getElementById('margin-prompt');
+  const marginDetails = document.getElementById('margin-details');
   if (!acctSizeVal || !acctSize || acctSize <= 0) {
-    marginCard.style.display = 'none';
+    marginPrompt.style.display = 'block';
+    marginDetails.style.display = 'none';
   } else {
-    marginCard.style.display = 'block';
+    marginPrompt.style.display = 'none';
+    marginDetails.style.display = 'block';
   const marginReq = repay; // full box notional held as collateral
   const marginPct = (marginReq / acctSize) * 100;
   const remaining = Math.max(0, acctSize - marginReq);
