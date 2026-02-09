@@ -59,8 +59,8 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <button onclick="setMode('manual')">Manual Entry</button>
 </div>
 
-<label>Account Size ($) <span style="color:var(--dim);font-size:.75rem">— for margin impact</span></label>
-<input type="number" id="account-size" value="500000" min="1000" step="1000">
+<label>Account Size ($) <span style="color:var(--dim);font-size:.75rem">— optional, for margin impact analysis</span></label>
+<input type="number" id="account-size" placeholder="Optional — enter to see margin impact" min="1000" step="1000">
 
 <label>Amount to Borrow ($)</label>
 <input type="number" id="amount" value="100000" min="1000" step="1000">
@@ -135,7 +135,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 <div id="savings" style="text-align:center;margin-top:12px"></div>
 </div>
 
-<div class="card">
+<div class="card" id="margin-card" style="display:none">
 <h2>📊 Margin Impact <span style="font-size:.7rem;color:var(--dim);font-weight:400">(Schwab Portfolio Margin)</span></h2>
 <div class="stat-grid">
 <div class="stat"><div class="val" id="m-acct">—</div><div class="lbl">Account Size</div></div>
@@ -390,7 +390,13 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
     : `<span style="color:var(--red)">Box rate exceeds typical margin — check pricing</span>`;
 
   // Margin Impact — Schwab Portfolio Margin rules
-  const acctSize = parseFloat(document.getElementById('account-size').value) || 500000;
+  const acctSizeVal = document.getElementById('account-size').value;
+  const acctSize = parseFloat(acctSizeVal);
+  const marginCard = document.getElementById('margin-card');
+  if (!acctSizeVal || !acctSize || acctSize <= 0) {
+    marginCard.style.display = 'none';
+  } else {
+    marginCard.style.display = 'block';
   const marginReq = repay; // full box notional held as collateral
   const marginPct = (marginReq / acctSize) * 100;
   const remaining = Math.max(0, acctSize - marginReq);
@@ -429,6 +435,7 @@ function displayResults(k1, k2, expiry, dte, contracts, credit, repay, spot) {
   }
 
   document.getElementById('margin-warning').innerHTML = warnings.join('<br><br>');
+  } // end margin card
 
   // thinkorswim order details
   function tosSym(strike, type) {
